@@ -2,7 +2,7 @@ package com.nitish.auraassistant.di
 
 import android.content.Context
 import androidx.room.Room
-import com.nitish.auraassistant.data.local.db.AuraAssistantDatabase
+import com.nitish.auraassistant.data.local.db.AuraDatabase
 import com.nitish.auraassistant.data.local.db.dao.ChatMessageDao
 import com.nitish.auraassistant.data.local.db.dao.ReminderDao
 import com.nitish.auraassistant.data.local.db.dao.UserProfileDao
