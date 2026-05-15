@@ -1,6 +1,4 @@
-package com.nitish.auraassistant.domain.repository
-
-
+package com.nitish.auraassistant.data.repository
 
 import com.nitish.auraassistant.data.local.db.dao.ChatMessageDao
 import com.nitish.auraassistant.data.local.db.entity.ChatMessageEntity

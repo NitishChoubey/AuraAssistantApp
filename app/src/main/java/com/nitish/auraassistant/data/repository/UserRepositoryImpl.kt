@@ -1,6 +1,4 @@
-package com.nitish.auraassistant.domain.repository
-
-
+package com.nitish.auraassistant.data.repository
 
 import com.nitish.auraassistant.data.local.datastore.UserPreferencesDataStore
 import com.nitish.auraassistant.domain.model.UserProfile
