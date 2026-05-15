@@ -1,6 +1,5 @@
-package com.nitish.auraassistant.ui.theme
+package com.nitish.auraassistant.presentation.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

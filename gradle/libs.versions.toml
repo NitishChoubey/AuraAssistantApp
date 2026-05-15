@@ -73,6 +73,7 @@ turbine                             = { group = "app.cash.turbine",          nam
 junit                               = { group = "junit",                     name = "junit",                             version.ref = "junit"          }
 androidx-test-junit                 = { group = "androidx.test.ext",         name = "junit",                             version.ref = "androidxTestJunit" }
 androidx-espresso-core              = { group = "androidx.test.espresso",    name = "espresso-core",                     version.ref = "espresso"       }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.7.3" }
 
 [plugins]
 android-application = { id = "com.android.application",            version.ref = "agp"    }
@@ -80,3 +81,4 @@ kotlin-android      = { id = "org.jetbrains.kotlin.android",       version.ref =
 kotlin-compose      = { id = "org.jetbrains.kotlin.plugin.compose",version.ref = "kotlin" }
 hilt                = { id = "com.google.dagger.hilt.android",     version.ref = "hilt"   }
 ksp                 = { id = "com.google.devtools.ksp",            version.ref = "ksp"    }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

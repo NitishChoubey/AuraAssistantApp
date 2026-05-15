@@ -1,4 +1,4 @@
-package com.nitish.auraassistant.ui.theme
+package com.nitish.auraassistant.presentation.theme
 
 import androidx.compose.ui.graphics.Color
 
