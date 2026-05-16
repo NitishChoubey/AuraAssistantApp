@@ -1,5 +1,9 @@
 package com.nitish.auraassistant.presentation.home.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -17,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +55,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -70,6 +75,7 @@ import com.nitish.auraassistant.presentation.theme.AuraAccentBright
 import com.nitish.auraassistant.presentation.theme.AuraDeepBg
 import com.nitish.auraassistant.presentation.theme.AuraError
 import com.nitish.auraassistant.presentation.theme.AuraGlow
+import com.nitish.auraassistant.presentation.theme.AuraInputBg
 import com.nitish.auraassistant.presentation.theme.AuraOnSurface
 import com.nitish.auraassistant.presentation.theme.AuraOnSurfaceDim
 import com.nitish.auraassistant.presentation.theme.AuraSurface
@@ -84,6 +90,25 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val msgState by viewModel.messageState.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
+    val context = LocalContext.current
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.startListening()
+    }
+
+    fun toggleMic() {
+        if (uiState.auraCircleState is AuraCircleState.Listening) {
+            viewModel.stopListening()
+        } else {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) viewModel.startListening()
+            else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val scrollThreshold = -120f
@@ -110,26 +135,31 @@ fun HomeScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopBar(userName = uiState.userName, syncStatus = syncStatus)
 
-            Box(modifier = Modifier.weight(1f)) {
-                AnimatedVisibility(
-                    visible = isScrolledUp,
-                    enter = fadeIn(tween(300)),
-                    exit = fadeOut(tween(300))
-                ) {
-                    ChatHistoryList(
-                        messages = uiState.messages,
-                        isLoadingMore = uiState.isLoadingMore,
-                        hasMorePages = uiState.hasMorePages,
-                        onLoadMore = viewModel::loadNextPage,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = !isScrolledUp,
-                    enter = fadeIn(tween(300)),
-                    exit = fadeOut(tween(300))
-                ) {
+            AnimatedContent(
+                targetState = isScrolledUp,
+                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                label = "mainContent",
+                modifier = Modifier.weight(1f)
+            ) { scrolledUp ->
+                if (scrolledUp) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        ChatHistoryList(
+                            messages = uiState.messages,
+                            isLoadingMore = uiState.isLoadingMore,
+                            hasMorePages = uiState.hasMorePages,
+                            onLoadMore = viewModel::loadNextPage,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        TextButton(
+                            onClick = { dragOffset = 0f },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 8.dp)
+                        ) {
+                            Text("↓ Back to Aura", color = AuraAccentBright, fontSize = 12.sp)
+                        }
+                    }
+                } else {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -152,11 +182,8 @@ fun HomeScreen(
                         ) {
                             AuraCircle(state = uiState.auraCircleState, size = 260.dp)
                         }
-
                         Spacer(modifier = Modifier.height(24.dp))
-
                         StateBanner(msgState = msgState, onRetry = viewModel::retryLastMessage)
-
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "↑ Swipe up for chat history",
@@ -164,17 +191,6 @@ fun HomeScreen(
                                 color = AuraOnSurfaceDim.copy(alpha = 0.5f)
                             )
                         )
-                    }
-                }
-
-                if (isScrolledUp) {
-                    TextButton(
-                        onClick = { dragOffset = 0f },
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 8.dp)
-                    ) {
-                        Text("↓ Back to Aura", color = AuraAccentBright, fontSize = 12.sp)
                     }
                 }
             }
@@ -186,10 +202,7 @@ fun HomeScreen(
                 onInputChange = viewModel::onInputChange,
                 onSend = viewModel::sendMessage,
                 onToggleKeyboard = viewModel::toggleKeyboard,
-                onToggleMic = {
-                    if (uiState.auraCircleState is AuraCircleState.Listening) viewModel.stopListening()
-                    else viewModel.startListening()
-                }
+                onToggleMic = { toggleMic() }
             )
         }
     }

@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,16 +40,15 @@ class OnboardingViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            userRepository.getUserProfile().collect { profile ->
-                if (profile.name.isNotBlank()) {
-                    _uiState.update {
-                        it.copy(
-                            name = profile.name,
-                            age = profile.age,
-                            phone = profile.phone,
-                            selectedTraits = profile.personalityTraits
-                        )
-                    }
+            val profile = userRepository.getUserProfile().first()
+            if (profile.name.isNotBlank()) {
+                _uiState.update {
+                    it.copy(
+                        name = profile.name,
+                        age = profile.age,
+                        phone = profile.phone,
+                        selectedTraits = profile.personalityTraits
+                    )
                 }
             }
         }

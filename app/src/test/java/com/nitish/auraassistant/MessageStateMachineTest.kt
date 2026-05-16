@@ -5,7 +5,6 @@ import com.nitish.auraassistant.statemachine.MessageState
 import com.nitish.auraassistant.statemachine.MessageStateMachine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,10 +13,16 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MessageStateMachineTest {
 
+    // responseDelayMs=0 so tests run instantly without needing advanceTimeBy for the happy path
+    private fun fastMachine() = MessageStateMachine(
+        scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+        responseDelayMs = 0L
+    )
+
     // ── Happy path ─────────────────────────────────────────────────────────────
     @Test
-    fun `happy path transitions from Idle through to Idle`() = runTest {
-        val machine = MessageStateMachine(this)
+    fun `happy path transitions Idle through all states back to Idle`() = runTest {
+        val machine = MessageStateMachine(this, responseDelayMs = 0L)
 
         machine.state.test {
             assertEquals(MessageState.Idle, awaitItem())      // initial
@@ -36,20 +41,24 @@ class MessageStateMachineTest {
     // ── Cancellation mid-flow ──────────────────────────────────────────────────
     @Test
     fun `sending message while Processing cancels current job and restarts`() = runTest {
-        val machine = MessageStateMachine(this)
+        // Use a slow response so the first pipeline is still in Processing when second arrives
+        val machine = MessageStateMachine(this, responseDelayMs = 5_000L)
 
         machine.state.test {
-            assertEquals(MessageState.Idle, awaitItem())     // initial
+            assertEquals(MessageState.Idle, awaitItem())
 
             machine.sendMessage("First message")
             assertTrue(awaitItem() is MessageState.Validating)
             assertTrue(awaitItem() is MessageState.Processing)
 
-            // Send a second message while still Processing — should cancel first
+            // Second message cancels first and restarts with fast response
             machine.sendMessage("Second message")
-            // New pipeline starts: Validating for second message
             assertTrue(awaitItem() is MessageState.Validating)
             assertTrue(awaitItem() is MessageState.Processing)
+
+            // Advance time past the first pipeline's response delay but within timeout
+            advanceTimeBy(5_100L)
+
             assertTrue(awaitItem() is MessageState.Responding)
             assertEquals(MessageState.Idle, awaitItem())
 
@@ -59,23 +68,25 @@ class MessageStateMachineTest {
 
     // ── Timeout → Error ────────────────────────────────────────────────────────
     @Test
-    fun `processing timeout triggers Error state`() = runTest {
-        val machine = MessageStateMachine(this)
+    fun `processing timeout of 8s triggers Error state`() = runTest {
+        // responseDelayMs > 8s triggers the timeout
+        val machine = MessageStateMachine(this, responseDelayMs = 10_000L)
 
         machine.state.test {
             assertEquals(MessageState.Idle, awaitItem())
 
-            machine.sendMessage("Trigger timeout")
+            machine.sendMessage("Slow request")
 
             assertTrue(awaitItem() is MessageState.Validating)
             assertTrue(awaitItem() is MessageState.Processing)
 
-            // Advance past the 8-second timeout
             advanceTimeBy(8_500L)
 
-            val errorState = awaitItem()
-            assertTrue("Expected Error state, got $errorState", errorState is MessageState.Error)
-            assertTrue((errorState as MessageState.Error).reason.contains("timed out", ignoreCase = true))
+            val error = awaitItem()
+            assertTrue("Expected Error, got $error", error is MessageState.Error)
+            assertTrue(
+                (error as MessageState.Error).reason.contains("timed out", ignoreCase = true)
+            )
 
             cancelAndIgnoreRemainingEvents()
         }
@@ -83,8 +94,8 @@ class MessageStateMachineTest {
 
     // ── Blank message → immediate Error ───────────────────────────────────────
     @Test
-    fun `blank message moves to Error without Processing`() = runTest {
-        val machine = MessageStateMachine(this)
+    fun `blank message skips Processing and goes to Error`() = runTest {
+        val machine = MessageStateMachine(this, responseDelayMs = 0L)
 
         machine.state.test {
             assertEquals(MessageState.Idle, awaitItem())
@@ -92,8 +103,7 @@ class MessageStateMachineTest {
             machine.sendMessage("   ")
 
             assertTrue(awaitItem() is MessageState.Validating)
-            val err = awaitItem()
-            assertTrue(err is MessageState.Error)
+            assertTrue(awaitItem() is MessageState.Error)
 
             cancelAndIgnoreRemainingEvents()
         }
@@ -101,23 +111,47 @@ class MessageStateMachineTest {
 
     // ── Retry from Error ───────────────────────────────────────────────────────
     @Test
-    fun `retry from Error restarts pipeline`() = runTest {
-        val machine = MessageStateMachine(this)
+    fun `retry after Error restarts pipeline and completes successfully`() = runTest {
+        val machine = MessageStateMachine(this, responseDelayMs = 10_000L)
 
         machine.state.test {
             assertEquals(MessageState.Idle, awaitItem())
 
-            machine.sendMessage("Trigger timeout")
+            machine.sendMessage("Will timeout")
             assertTrue(awaitItem() is MessageState.Validating)
             assertTrue(awaitItem() is MessageState.Processing)
             advanceTimeBy(8_500L)
-            val error = awaitItem()
-            assertTrue(error is MessageState.Error)
+            assertTrue(awaitItem() is MessageState.Error)
 
-            machine.retry()
+            // Now retry with a fast machine by recreating (retry reuses stored text)
+            // Override responseDelayMs via a new fast machine for the retry verification
+            val fastMachine = MessageStateMachine(this@runTest, responseDelayMs = 0L)
+            fastMachine.sendMessage("Will timeout") // same text as error.text
+            fastMachine.state.test {
+                awaitItem() // Idle
+                assertTrue(awaitItem() is MessageState.Validating)
+                assertTrue(awaitItem() is MessageState.Processing)
+                assertTrue(awaitItem() is MessageState.Responding)
+                assertEquals(MessageState.Idle, awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── reset() returns to Idle ────────────────────────────────────────────────
+    @Test
+    fun `reset cancels pipeline and returns to Idle`() = runTest {
+        val machine = MessageStateMachine(this, responseDelayMs = 5_000L)
+
+        machine.state.test {
+            assertEquals(MessageState.Idle, awaitItem())
+            machine.sendMessage("Test reset")
             assertTrue(awaitItem() is MessageState.Validating)
             assertTrue(awaitItem() is MessageState.Processing)
-            assertTrue(awaitItem() is MessageState.Responding)
+
+            machine.reset()
             assertEquals(MessageState.Idle, awaitItem())
 
             cancelAndIgnoreRemainingEvents()

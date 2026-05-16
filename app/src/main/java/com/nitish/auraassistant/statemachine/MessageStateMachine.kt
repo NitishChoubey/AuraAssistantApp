@@ -11,7 +11,10 @@ import kotlinx.coroutines.withTimeout
 
 private const val PROCESSING_TIMEOUT_MS = 8_000L
 
-class MessageStateMachine(private val scope: CoroutineScope) {
+class MessageStateMachine(
+    private val scope: CoroutineScope,
+    private val responseDelayMs: Long = 1_500L
+) {
 
     private val _state = MutableStateFlow<MessageState>(MessageState.Idle)
     val state: StateFlow<MessageState> = _state.asStateFlow()
@@ -70,7 +73,7 @@ class MessageStateMachine(private val scope: CoroutineScope) {
     }
 
     private suspend fun simulateAiResponse(text: String): String {
-        delay(1_500)
+        delay(responseDelayMs)
         return "Aura response to: \"$text\""
     }
 }
